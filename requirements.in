@@ -1,0 +1,31 @@
+# Satellite (src/p2_satellite) PRODUCTION runtime dependencies only.
+#
+# Compiled to requirements.txt via pip-tools (MIT):
+#   pip-compile --generate-hashes --output-file=requirements.txt requirements.in
+#
+# core-side-patch/ dependencies deliberately do NOT belong in this file --
+# the satellite must never import anything from core-side-patch/ or vice
+# versa (agent-push / inbound-only rule, see PATENT.md). Its dependencies
+# (sqlalchemy, pgvector, alembic, pyvis, ...) live in requirements-dev.in
+# instead, since they're only needed to run THIS demo repo's test suite
+# (which happens to colocate both sides -- see
+# core-side-patch/ASSUMPTIONS.md item 13), not to run the satellite itself.
+# See core-side-patch/requirements-additions.txt for what the REAL core repo
+# would need for core-side-patch/ once merged there.
+
+networkx==3.3
+sentence-transformers==5.6.0
+# Pinned directly (not left purely transitive via sentence-transformers) so
+# a future re-compile can't silently drift back to a vulnerable version --
+# see SECURITY_SCAN.md's "ML dependency note".
+transformers==5.13.0
+httpx==0.27.0
+apscheduler==3.10.4
+fastapi==0.139.0
+starlette==1.3.1
+uvicorn==0.30.1
+pydantic==2.13.4
+python-dotenv==1.2.2
+tenacity==8.4.1
+structlog==26.1.0
+prometheus-client==0.24.1

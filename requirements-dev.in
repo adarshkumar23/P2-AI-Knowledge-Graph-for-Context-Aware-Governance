@@ -1,0 +1,44 @@
+# Dev/test/CI-only dependencies -- never installed in a production satellite
+# deployment. Compiled via pip-tools (MIT):
+#   pip-compile --generate-hashes --output-file=requirements-dev.txt requirements-dev.in
+#
+# Includes production deps too (-r requirements.in) since running the test
+# suite needs the satellite's own runtime dependencies installed as well.
+-r requirements.in
+
+# --- Test runner -------------------------------------------------------
+pytest==9.1.1
+pytest-cov==7.1.0
+
+# --- Code quality (see pyproject.toml for config, .pre-commit-config.yaml
+#     for how these get wired into a commit hook) ----------------------
+ruff==0.15.20
+mypy==2.1.0
+black==26.5.1
+pre-commit==4.6.0
+
+# --- Security scanning (see SECURITY_SCAN.md) ---------------------------
+pip-audit==2.10.1
+bandit==1.9.4
+
+# --- This repo's own dependency-pinning tool (yes, pip-tools depends on
+#     itself being listed here so `pip-compile` is reproducibly available,
+#     not just "whatever happens to be on a dev's PATH") ----------------
+pip-tools==7.5.3
+
+# --- core-side-patch/ demo dependencies ---------------------------------
+# NOT satellite runtime dependencies, and NOT what should be merged into
+# the real core repo's requirements file (see
+# core-side-patch/requirements-additions.txt for that list, which has its
+# own, independently-pinned version guidance for the real core team).
+# These exist ONLY so core-side-patch/'s own code and tests are importable
+# and runnable inside THIS demo/patch-development repo, which colocates
+# core-side-patch/tests/ alongside the satellite's own test suite under one
+# pytest.ini (see core-side-patch/ASSUMPTIONS.md item 13) -- a real core
+# repo already has its own pinned versions of sqlalchemy/alembic/fastapi
+# (fastapi is already in requirements.in above) and would supply pgvector/
+# pyvis via its own dependency file once this patch set is actually merged.
+sqlalchemy==2.0.51
+pgvector==0.4.2
+alembic==1.18.5
+pyvis==0.3.2

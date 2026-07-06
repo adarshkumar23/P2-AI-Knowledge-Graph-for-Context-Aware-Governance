@@ -1,0 +1,155 @@
+[tool.ruff]
+target-version = "py312"
+# Longer than black/ruff's 88-char default: this codebase deliberately
+# carries long, explanatory comments/docstrings (documented assumptions,
+# design rationale -- see core-side-patch/ASSUMPTIONS.md and every module's
+# docstring). Reflowing hundreds of prose comment lines down to 88 chars
+# would be pure churn, not a real quality improvement -- 120 accommodates
+# the existing prose style without relaxing line length for actual code.
+line-length = 120
+extend-exclude = ["p2-knowledge-graph.zip", "*.egg-info"]
+
+[tool.ruff.lint]
+# Defaults (E4/E7/E9/F) plus:
+#   I   - isort (import sorting -- see task requirement)
+#   UP  - pyupgrade (modern Python 3.12 syntax)
+#   B   - flake8-bugbear (common real bugs: mutable defaults, bare except, ...)
+#   SIM - flake8-simplify (redundant conditionals/comprehensions)
+select = ["E4", "E7", "E9", "F", "I", "UP", "B", "SIM"]
+ignore = [
+    # B008: function calls in argument defaults -- this is exactly FastAPI's
+    # Depends(...)/Query(...)/Header(...) idiom, used throughout every
+    # router in this codebase. Flagging it would mean suppressing it at
+    # every single route signature; the pattern is correct FastAPI usage,
+    # not a bug.
+    "B008",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# core-side-patch/ uses flat sibling imports on purpose (e.g. `from models
+# import ...`, not `from .models import ...`) because the directory name
+# contains a hyphen and isn't a valid Python package segment -- see
+# core-side-patch/ASSUMPTIONS.md item 14. Ruff's isort (I001) would want to
+# treat these as third-party/first-party ambiguously without a package
+# root; explicitly telling isort where core-side-patch's own modules live
+# (via known-first-party below) handles sorting correctly without needing
+# per-file ignores here.
+"tests/fixtures/*.py" = ["E501"]  # fixture data files: long literal dicts, not prose
+
+[tool.ruff.lint.isort]
+known-first-party = ["src", "p2_satellite"]
+# core-side-patch/'s own flat-imported modules (models, permissions,
+# dependencies, graph_query, validation, ...) -- listed explicitly so isort
+# groups them as first-party instead of guessing they're third-party
+# packages, matching the flat-sibling-import convention documented in
+# core-side-patch/ASSUMPTIONS.md item 14.
+known-local-folder = [
+    "audit_service_stub",
+    "change_event_outbox",
+    "data_providers",
+    "dependencies",
+    "graph_query",
+    "mismatch_metrics",
+    "models",
+    "permissions",
+    "rate_limiter",
+    "reference_traversal_cte",
+    "validation",
+]
+
+[tool.black]
+target-version = ["py312"]
+line-length = 120
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = ["core-side-patch"]
+# src/p2_satellite is imported two ways across this repo (`from
+# src.p2_satellite import X` inside src/ itself, `from src.p2_satellite
+# import X` from tests/ and core-side-patch/tests/) but `src/` has no
+# __init__.py -- explicit_package_bases (with mypy_path as the bases list)
+# tells mypy to resolve module names relative to the repo root / mypy_path
+# entries instead of guessing a package root per input file, which is what
+# was causing "Source file found twice under different module names".
+explicit_package_bases = true
+namespace_packages = true
+plugins = ["pydantic.mypy", "sqlalchemy.ext.mypy.plugin"]
+warn_return_any = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+# NOT full --strict: this codebase mixes SQLAlchemy declarative models
+# (dynamically-typed Column attributes with no first-party stubs installed
+# here), FastAPI's Depends()-injected parameters, and networkx.DiGraph
+# (untyped third-party library) -- disallow_untyped_defs catches real
+# missing-annotation bugs without also demanding annotations mypy can't
+# meaningfully check against those dynamic APIs. See per-module overrides
+# below for the few places a real, justified relaxation is needed.
+exclude = [
+    "core-side-patch/tests/",
+    "^tests/",
+    "^scripts/",
+    "conftest.py",
+]
+
+[[tool.mypy.overrides]]
+# SQLAlchemy's declarative_base() produces a dynamically-typed Base class;
+# without the (unavailable in this offline environment) sqlalchemy2-stubs/
+# sqlalchemy-stubs plugin, mypy cannot verify Column(...) assignments
+# against declared attribute types. Real type errors in the plain-Python
+# logic of these modules are still caught (this override only relaxes the
+# ORM-model-definition parts) -- see each module's own inline comments
+# where a specific line needed a targeted ignore instead.
+module = ["models", "change_event_outbox", "data_providers"]
+disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+# networkx has no type stubs installed in this environment; every function
+# that receives/returns nx.DiGraph would otherwise need Any-typed
+# parameters flagged as untyped by disallow_untyped_defs even when every
+# OTHER parameter/return is correctly annotated.
+module = ["src.p2_satellite.graph_builder", "src.p2_satellite.traversal", "src.p2_satellite.scheduler"]
+disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = "networkx.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "apscheduler.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "sentence_transformers.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pgvector.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pyvis.*"
+ignore_missing_imports = true
+
+[tool.coverage.run]
+branch = true
+source = ["src/p2_satellite", "core-side-patch"]
+omit = [
+    "core-side-patch/tests/*",
+    "core-side-patch/migrations/*",
+]
+
+[tool.coverage.report]
+# No hard fail_under here -- see COVERAGE.md: this repo tracks coverage as a
+# signal to investigate genuinely under-tested logic, not a number to defend
+# by padding. CI (.github/workflows/ci.yml) reports the number on every PR
+# instead of gating on it, so a real regression is visible without a brittle
+# threshold blocking unrelated work.
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]

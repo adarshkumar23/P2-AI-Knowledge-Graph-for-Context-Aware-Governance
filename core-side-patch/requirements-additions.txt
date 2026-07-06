@@ -1,0 +1,41 @@
+# Patch for CompliVibe core (app.complivibe.in), lands on top of migration head 0175.
+#
+# New CORE-side dependencies needed by this patch set. Do NOT merge these into
+# the satellite's root requirements.txt -- these are for the real core repo's
+# own requirements/pyproject file. Pin exact versions to whatever core's
+# dependency-resolution policy requires; the versions below are simply what
+# this patch set was developed/tested against in this satellite-only repo.
+#
+# - sqlalchemy / alembic / fastapi: assumed already present in core (this is
+#   what core is built on per CLAUDE_CODE_GOAL_PROMPT.md) -- listed here only
+#   for completeness/version-pinning reference, NOT necessarily new additions.
+#   Verify against core's actual requirements file before assuming these are
+#   net-new.
+sqlalchemy>=2.0,<2.1
+alembic>=1.13,<1.14
+fastapi>=0.111,<0.112
+
+# - pgvector (python client for the Postgres pgvector extension): almost
+#   certainly NEW to core, needed for the embedding Vector(384) column on
+#   governance_graph_nodes. The Postgres-side `CREATE EXTENSION vector` also
+#   needs to be available/enabled on core's database server -- see
+#   migrations/0176_add_governance_graph_tables.py upgrade().
+pgvector>=0.2.5,<0.3
+
+# - asyncpg / psycopg2-binary: only needed if core's SQLAlchemy engine for
+#   this feature area uses one of these drivers and doesn't already depend on
+#   it elsewhere. Verify against core's existing DB driver before adding --
+#   most likely core already depends on one of these for its primary Postgres
+#   connection and this is a no-op.
+asyncpg>=0.29,<0.30
+psycopg2-binary>=2.9,<3.0
+
+# - pyvis (BSD-3): powers GET .../systems/{id}/graph?format=html's optional
+#   rendered-graph debugging/demo view (see graph_query.render_subgraph_html).
+#   Almost certainly NEW to core -- this is a small, narrowly-used
+#   visualization convenience, not a core dependency of the JSON contract
+#   (Feature 2's primary, versioned response shape has no dependency on this
+#   package at all). Safe to omit entirely if core's team decides the
+#   ?format=html convenience isn't worth a new dependency; the JSON endpoint
+#   works unchanged either way.
+pyvis>=0.3.2,<0.4

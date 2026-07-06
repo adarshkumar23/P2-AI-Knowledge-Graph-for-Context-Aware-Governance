@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same branch/PR so pushes during review don't
+# queue up redundant (and, given the ML dependency closure, slow) CI runs.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  test:
+    name: pytest (full suite + coverage)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Run full test suite with coverage
+        run: |
+          pytest --cov=src/p2_satellite --cov=core-side-patch \
+                 --cov-report=term-missing --cov-report=xml -q
+      # Reported on every run, not gated on a hard threshold -- see
+      # COVERAGE.md on why this repo tracks coverage as a signal to
+      # investigate, not a number to defend by padding.
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+
+  lint-and-types:
+    name: ruff + black + mypy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+      - name: ruff check
+        run: ruff check .
+      - name: black --check
+        run: black --check .
+      - name: mypy
+        run: mypy --config-file pyproject.toml .
+
+  security:
+    name: pip-audit + bandit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+      - name: pip-audit (dependency vulnerabilities)
+        run: pip-audit -r requirements.txt
+      - name: bandit (static security scan)
+        run: bandit -r src/p2_satellite core-side-patch -x "*/tests/*,*/__pycache__/*"
+
+  architecture-guard:
+    name: no-core-imports guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce satellite never imports core (agent-push / inbound-only rule)
+        run: bash scripts/check_no_core_imports.sh

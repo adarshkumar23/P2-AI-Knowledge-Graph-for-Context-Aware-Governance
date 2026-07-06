@@ -1,0 +1,50 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Pinned to match the ruff version this repo was actually linted with
+    # (see requirements-dev section / CI) -- ruff's rule set has changed
+    # between versions (e.g. UP038 was later removed upstream), so a stale
+    # pin here would silently drift from what `ruff check .` reports locally.
+    rev: v0.15.20
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+        # Not used -- this repo standardizes on `black` for formatting (see
+        # below) to keep exactly one formatter's opinion in force. ruff's own
+        # formatter is intentionally left out of `default_stages` so
+        # installing this hook set never runs two formatters against the
+        # same files.
+        stages: [manual]
+
+  - repo: https://github.com/psf/black
+    rev: 26.5.1
+    hooks:
+      - id: black
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: mypy --config-file pyproject.toml .
+        language: system
+        pass_filenames: false
+        # Whole-repo run, not per-file: this codebase spans two package
+        # roots (src/p2_satellite's dotted imports, core-side-patch's flat
+        # sibling imports -- see ASSUMPTIONS.md item 14) that mypy's
+        # explicit_package_bases setting (pyproject.toml) needs resolved
+        # together, not file-by-file.
+        types: [python]
+
+  - repo: local
+    hooks:
+      - id: pytest-fast
+        name: pytest (full suite)
+        entry: pytest -q
+        language: system
+        pass_filenames: false
+        # Full suite, not just changed-file tests: this repo's test suite
+        # runs in well under a minute (see README.md/PERFORMANCE.md), and
+        # cross-module regressions (e.g. a core-side-patch change breaking a
+        # satellite-side cross-validation test) are exactly the kind of bug
+        # a partial run would miss.
+        stages: [pre-push]
